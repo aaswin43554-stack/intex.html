@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Wellness AI — Booking</title>
+
+  <!-- Tailwind CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+    :root { --bg: #f3f4f6; --muted: #6b7280; --accent: #2563eb; }
+    body { font-family: 'Inter', sans-serif; background: var(--bg); color: #111827; }
+
+    /* page show/hide */
+    .page-content { display: none; opacity: 0; transform: translateY(12px); transition: opacity .28s ease, transform .28s ease; }
+    .active-page { display: block; opacity: 1; transform: translateY(0); }
+
+    .input-error { border-color: #ef4444 !important; }
+
+    /* side menu */
+    .side-menu {
+      position: fixed;
+      top: 0;
+      right: -320px;
+      width: 320px;
+      height: 100vh;
+      background: #fff;
+      box-shadow: -8px 0 24px rgba(0,0,0,.12);
+      transition: right .28s ease, box-shadow .28s ease;
+      z-index: 80;
+    }
+    .side-menu.open { right: 0; z-index: 120; }
+
+    /* simple blue tick animation similar to GPay */
+    .tick-wrap { width: 160px; height: 160px; display: flex; align-items: center; justify-content: center; }
+    .tick-circle {
+      width: 140px; height: 140px; border-radius: 999px; display: flex; align-items: center; justify-content: center;
+      background: linear-gradient(135deg, rgba(37,99,235,0.12), rgba(37,99,235,0.06));
+      transform: scale(.4);
+      opacity: 0;
+      animation: circle-pop .45s cubic-bezier(.2,.9,.2,1) .15s forwards;
+    }
+    .tick-svg { width: 90px; height: 90px; opacity: 0; transform: translateY(6px) scale(.9); animation: tick-pop .5s cubic-bezier(.2,.9,.2,1) .35s forwards; }
+    @keyframes circle-pop {
+      to { transform: scale(1); opacity: 1; }
+    }
+    @keyframes tick-pop {
+      0% { opacity: 0; transform: translateY(6px) scale(.9); }
+      60% { opacity: 1; transform: translateY(-6px) scale(1.06); }
+      100% { transform: translateY(0) scale(1); }
+    }
+
+    /* overlay used during success animation to avoid accidental clicks */
+    .overlay-click-block { position: fixed; inset: 0; z-index: 200; background: rgba(0,0,0,0.16); display: flex; align-items: center; justify-content: center; }
+
+    /* small helpers */
+    .day-active { background-color: var(--accent); color: white; }
+    .time-active { background-color: var(--accent); color: white; }
+
+    /* small responsive tweak to ensure calendar uses full width on small screens */
+    @media (max-width: 640px) {
+      .side-menu { width: 100%; right: -100%; }
+      .side-menu.open { right: 0; }
+      .tick-wrap { width: 120px; height: 120px; }
+    }
+  </style>
+</head>
+<body class="min-h-screen bg-gray-100">
+
+  <!-- MENU BUTTON (top-right) -->
+  <button id="menu-toggle" aria-label="Open menu"
+          class="fixed top-4 right-4 z-130 p-2 bg-white rounded-full shadow-lg">
+    <svg class="w-6 h-6 text-gray-800" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M4 6h16M4 12h16M4 18h16"></path>
+    </svg>
+  </button>
+
+  <!-- SIDE MENU -->
+  <aside id="side-menu" class="side-menu p-5" aria-hidden="true">
+    <div class="flex items-center justify-between mb-4">
+      <h3 class="text-xl font-semibold text-gray-800">Menu</h3>
+      <button id="side-close" aria-label="Close menu" class="text-gray-600 hover:text-gray-900">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M6 18L18 6M6 6l12 12"></path>
+        </svg>
+      </button>
+    </div>
+
+    <nav class="space-y-3">
+      <button data-goto="page-1" class="w-full text-left p-3 rounded-lg hover:bg-gray-100">Home</button>
+      <button data-goto="page-2" class="w-full text-left p-3 rounded-lg hover:bg-gray-100">Book a discovery call</button>
+      <button id="about-open" class="w-full text-left p-3 rounded-lg hover:bg-gray-100">About</button>
+    </nav>
+
+    <div id="about-content" class="mt-6 text-sm text-gray-600 hidden">
+      <p>This app helps SEO teams and agencies book discovery calls for AI & automation support.</p>
+    </div>
+  </aside>
+
+  <!-- PAGES -->
+  <!-- Page 1: Home -->
+  <main id="page-1" class="page-content active-page">
+    <div class="bg-orange-500 py-16 px-4 text-center text-white">
+      <h1 class="text-4xl md:text-5xl font-bold mb-3">Wellness AI</h1>
+      <p class="text-lg md:text-xl mb-6">Future-proofing SEO teams and agencies</p>
+      <div class="flex flex-col sm:flex-row justify-center items-center gap-4">
+        <button id="book-discovery-call" class="bg-white text-orange-500 px-8 py-3 rounded-full font-bold shadow-lg hover:bg-gray-200">Book a discovery call</button>
+
+        <a id="whatsapp-link-home" href="#" class="bg-green-500 text-white px-6 py-3 rounded-full font-bold shadow-lg flex items-center gap-2">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.911C.154 5.572 5.823.097 12.138.097s11.986 5.475 11.986 12.235c0 6.752-5.654 12.235-11.986 12.235h-.001c-2.879 0-5.728-.815-8.182-2.332l-6.22 1.621z"></path></svg>
+          Connect with WhatsApp
+        </a>
+      </div>
+    </div>
+
+    <div class="max-w-7xl mx-auto p-4 md:p-8">
+      <h2 class="text-3xl font-bold mb-6 text-center text-gray-800">How do we help?</h2>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+        <div class="bg-white rounded-lg shadow-lg p-6 text-center">
+          <h3 class="text-xl font-semibold mb-2">Training</h3>
+          <p class="text-gray-600">AI & Automation training for your SEO team tailored to their needs.</p>
+        </div>
+        <div class="bg-white rounded-lg shadow-lg p-6 text-center">
+          <h3 class="text-xl font-semibold mb-2">Software</h3>
+          <p class="text-gray-600">Custom SEO software to scale and reduce costs.</p>
+        </div>
+        <div class="bg-white rounded-lg shadow-lg p-6 text-center">
+          <h3 class="text-xl font-semibold mb-2">Development</h3>
+          <p class="text-gray-600">Bespoke AI and automation solutions for your SEO team.</p>
+        </div>
+      </div>
+
+      <div class="bg-gray-800 rounded-lg shadow-lg p-8 text-center text-white">
+        <div class="mx-auto h-32 w-32 rounded-full overflow-hidden mb-4">
+          <img src="https://placehold.co/128x128" alt="Profile" class="w-full h-full object-cover">
+        </div>
+        <h3 class="text-2xl font-bold mb-2">Future proof your SEO team</h3>
+        <p class="mb-4 text-gray-300">We can take on 5 new clients per month. Let's chat about what AI & automation could help your SEO team achieve.</p>
+        <button id="book-discovery-call-2" class="bg-white text-gray-800 px-8 py-3 rounded-full font-bold shadow-lg hover:bg-gray-200">Book a discovery call</button>
+      </div>
+    </div>
+  </main>
+
+  <!-- Page 2: Calendar -->
+  <section id="page-2" class="page-content max-w-5xl mx-auto p-4 md:p-8 mt-8 md:mt-12">
+    <div class="flex flex-col md:flex-row bg-white rounded-lg shadow-lg overflow-hidden">
+      <aside class="w-full md:w-1/3 border-b md:border-b-0 md:border-r border-gray-200 p-6">
+        <h3 class="text-2xl font-bold mb-2">Finn Elliott</h3>
+        <h4 class="text-lg font-semibold text-gray-700 mb-4">SEO AI & Automation Discovery Call</h4>
+        <div class="text-sm text-gray-600 mb-4">
+          <div class="flex items-center gap-2 mb-2"><svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M10 18a8 8 0 100-16 8 8 0 000 16z"></path></svg>45 min</div>
+          <div class="flex items-center gap-2"><svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M2 5a2 2 0 012-2h12"></path></svg>Web conferencing details provided upon confirmation.</div>
+        </div>
+        <p class="text-xs text-gray-500 italic">Powered by Calendly</p>
+      </aside>
+
+      <div class="w-full md:w-2/3 p-6">
+        <h2 class="text-2xl font-bold mb-4">Select a Date & Time</h2>
+
+        <div class="flex justify-between items-center mb-4">
+          <button id="prev-month" class="text-gray-600 hover:text-gray-900 px-3 py-1 rounded">&lt;</button>
+          <h3 id="current-month" class="text-lg font-semibold"></h3>
+          <button id="next-month" class="text-gray-600 hover:text-gray-900 px-3 py-1 rounded">&gt;</button>
+        </div>
+
+        <div id="calendar-grid" class="grid grid-cols-7 gap-2 text-center text-sm text-gray-500">
+          <!-- Weekday headers and day cells inserted by JS -->
+        </div>
+
+        <div id="time-picker" class="mt-6 hidden">
+          <h3 id="selected-date-display" class="text-lg font-semibold mb-4"></h3>
+          <div id="time-slots" class="grid grid-cols-2 md:grid-cols-4 gap-2"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Page 3: Details form -->
+  <section id="page-3" class="page-content max-w-5xl mx-auto p-4 md:p-8 mt-8 md:mt-12">
+    <div class="flex flex-col md:flex-row bg-white rounded-lg shadow-lg overflow-hidden">
+      <aside class="w-full md:w-1/3 border-b md:border-b-0 md:border-r border-gray-200 p-6">
+        <h3 class="text-2xl font-bold mb-2">Finn Elliott</h3>
+        <h4 class="text-lg font-semibold text-gray-700 mb-4">SEO AI & Automation Discovery Call</h4>
+        <div id="booking-details-summary" class="text-sm text-gray-600 mb-4"></div>
+        <p class="text-xs text-gray-500 italic mt-auto">Powered by Calendly</p>
+      </aside>
+
+      <div class="w-full md:w-2/3 p-6">
+        <h2 class="text-2xl font-bold mb-4">Enter Details</h2>
+
+        <form id="details-form" class="space-y-4">
+          <div>
+            <label for="name" class="block text-sm font-medium text-gray-700 mb-1">Name *</label>
+            <input id="name" required class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none" />
+            <p id="name-error" class="text-xs text-red-500 mt-1 hidden">Can't be blank.</p>
+          </div>
+
+          <div>
+            <label for="email" class="block text-sm font-medium text-gray-700 mb-1">Email *</label>
+            <input id="email" type="email" required class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none" />
+            <p id="email-error" class="text-xs text-red-500 mt-1 hidden">Enter a valid email.</p>
+          </div>
+
+          <div>
+            <label for="agency" class="block text-sm font-medium text-gray-700 mb-1">Internal or Agency? *</label>
+            <select id="agency" required class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none">
+              <option value="">Select...</option>
+              <option value="internal">Internal SEO Team</option>
+              <option value="agency">Agency</option>
+            </select>
+            <p id="agency-error" class="text-xs text-red-500 mt-1 hidden">One answer must be selected.</p>
+          </div>
+
+          <div>
+            <label for="role" class="block text-sm font-medium text-gray-700 mb-1">Role *</label>
+            <input id="role" required class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none" />
+            <p id="role-error" class="text-xs text-red-500 mt-1 hidden">Can't be blank.</p>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label for="seo-clients" class="block text-sm font-medium text-gray-700 mb-1">How many SEO clients? *</label>
+              <input id="seo-clients" type="number" required class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none" />
+              <p id="seo-clients-error" class="text-xs text-red-500 mt-1 hidden">Can't be blank.</p>
+            </div>
+
+            <div>
+              <label for="content-pieces" class="block text-sm font-medium text-gray-700 mb-1">Content pieces / month *</label>
+              <input id="content-pieces" type="number" required class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none" />
+              <p id="content-pieces-error" class="text-xs text-red-500 mt-1 hidden">Can't be blank.</p>
+            </div>
+          </div>
+
+          <div>
+            <label for="phone-number" class="block text-sm font-medium text-gray-700 mb-1">Phone number *</label>
+            <div class="flex items-center border border-gray-300 rounded-lg overflow-hidden">
+              <select id="country-code" class="bg-gray-100 p-3 border-r border-gray-300">
+                <option value="+91">🇮🇳 (+91)</option>
+                <option value="+1">🇺🇸 (+1)</option>
+                <option value="+44">🇬🇧 (+44)</option>
+              </select>
+              <input id="phone-number" type="tel" required pattern="[0-9]*" class="w-full p-3 focus:outline-none" />
+            </div>
+            <p id="phone-number-error" class="text-xs text-red-500 mt-1 hidden">Can't be blank.</p>
+          </div>
+
+          <p class="text-xs text-gray-500">By proceeding you confirm you have read Calendly's Terms of Use and Privacy Notice.</p>
+
+          <button type="submit" class="w-full bg-blue-600 text-white p-3 rounded-lg font-semibold hover:bg-blue-700">Schedule Event</button>
+          <p id="form-error-message" class="text-red-500 text-sm hidden">Please fill out all required fields correctly.</p>
+        </form>
+      </div>
+    </div>
+  </section>
+
+  <!-- Booking success overlay (blue tick) shown briefly -->
+  <div id="booking-success-overlay" class="page-content" aria-hidden="true">
+    <div class="overlay-click-block">
+      <div class="bg-white rounded-lg p-8 shadow-xl text-center">
+        <div class="tick-wrap mx-auto mb-4">
+          <div class="tick-circle">
+            <!-- Blue tick SVG -->
+            <svg class="tick-svg" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="32" cy="32" r="30" fill="transparent"></circle>
+              <path d="M18 34 L28 44 L46 22" stroke="#1e3a8a" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none"></path>
+            </svg>
+          </div>
+        </div>
+
+        <h2 class="text-2xl font-bold text-gray-800 mb-2">Booking Successful!</h2>
+        <p class="text-gray-600">We're confirming your meeting — taking you to the summary now.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Page 4: Final summary (user is taken here after success animation) -->
+  <section id="page-4" class="page-content max-w-5xl mx-auto p-4 md:p-8 mt-8 md:mt-12">
+    <div class="flex flex-col md:flex-row bg-white rounded-lg shadow-lg overflow-hidden">
+      <aside class="w-full md:w-1/3 border-b md:border-b-0 md:border-r border-gray-200 p-6">
+        <h3 class="text-2xl font-bold mb-2">Finn Elliott</h3>
+        <h4 class="text-lg font-semibold text-gray-700 mb-4">SEO AI & Automation Discovery Call</h4>
+        <div id="booking-summary-side" class="text-sm text-gray-600 mb-4"></div>
+        <div class="mt-4">
+          <p>Thank you for visiting our site.</p>
+        </div>
+      </aside>
+
+      <div class="w-full md:w-2/3 p-6 text-center">
+        <h2 class="text-2xl font-bold mb-2">You are scheduled, <span id="scheduled-name"></span>!</h2>
+        <p id="scheduled-email" class="text-gray-600 mb-4"></p>
+        <div class="bg-white border border-gray-300 rounded-lg p-4 mb-6 inline-block hover:shadow-md transition">
+          <img src="https://placehold.co/200x50/F5F5F5/808080?text=calendly.com/aswin" alt="Calendly link" class="mx-auto" />
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+          <button id="google-signin" class="flex items-center justify-center gap-2 border border-gray-300 rounded-lg p-3 hover:bg-gray-100 transition">
+            <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><path d="M21 12.3A9 9 0 1112.7 3"></path></svg>
+            Sign in with Google
+          </button>
+
+          <button id="microsoft-signin" class="flex items-center justify-center gap-2 border border-gray-300 rounded-lg p-3 hover:bg-gray-100 transition">
+            <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><path d="M3 3h8v8H3zM13 3h8v8h-8zM3 13h8v8H3zM13 13h8v8h-8z"></path></svg>
+            Sign in with Microsoft
+          </button>
+        </div>
+
+        <a id="whatsapp-link-final" href="#" class="mt-4 flex items-center justify-center gap-2 text-green-600 font-semibold hover:underline">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.911C.154 5.572 5.823.097 12.138.097s11.986 5.475 11.986 12.235c0 6.752-5.654 12.235-11.986 12.235"></path></svg>
+          Connect with WhatsApp
+        </a>
+
+        <div class="mt-6">
+          <button id="back-home" class="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700">Back to Home</button>
+        </div>
+      </div>
+    </div>
+
+    <p class="text-center text-gray-500 mt-8 mb-4 text-sm">Thank you for visiting our site.</p>
+  </section>
+
+  <!-- SCRIPT -->
+  <script>
+    (function () {
+      // Elements
+      const pages = document.querySelectorAll('.page-content');
+      const gotoButtons = document.querySelectorAll('[data-goto]');
+      const menuToggle = document.getElementById('menu-toggle');
+      const sideMenu = document.getElementById('side-menu');
+      const sideClose = document.getElementById('side-close');
+      const aboutOpen = document.getElementById('about-open');
+      const aboutContent = document.getElementById('about-content');
+
+      // Page controls
+      const page1Btn = document.getElementById('book-discovery-call');
+      const page1Btn2 = document.getElementById('book-discovery-call-2');
+      const page2Prev = document.getElementById('prev-month');
+      const page2Next = document.getElementById('next-month');
+      const calendarGrid = document.getElementById('calendar-grid');
+      const currentMonthEl = document.getElementById('current-month');
+      const timePicker = document.getElementById('time-picker');
+      const selectedDateDisplay = document.getElementById('selected-date-display');
+      const timeSlots = document.getElementById('time-slots');
+      const detailsForm = document.getElementById('details-form');
+      const bookingSummary = document.getElementById('booking-details-summary');
+      const bookingSummarySide = document.getElementById('booking-summary-side');
+      const bookingSuccessOverlay = document.getElementById('booking-success-overlay');
+      const scheduledNameEl = document.getElementById('scheduled-name');
+      const scheduledEmailEl = document.getElementById('scheduled-email');
+      const nameInput = document.getElementById('name');
+      const emailInput = document.getElementById('email');
+      const countryCode = document.getElementById('country-code');
+      const phoneInput = document.getElementById('phone-number');
+
+      const googleBtn = document.getElementById('google-signin');
+      const msBtn = document.getElementById('microsoft-signin');
+
+      const backHomeBtn = document.getElementById('back-home');
+
+      // calendar state
+      let currentDate = new Date();
+      currentDate.setDate(1);
+      let selectedDate = null;
+      let selectedTime = null;
+
+      // Utility: show page by id, hide others. Also make sure side menu closed.
+      function showPage(id) {
+        pages.forEach(p => p.classList.remove('active-page'));
+        const el = document.getElementById(id);
+        if (el) el.classList.add('active-page');
+
+        // Always close side-menu when navigating
+        closeSideMenu();
+      }
+
+      // Toggle side menu
+      function openSideMenu() {
+        sideMenu.classList.add('open');
+        sideMenu.setAttribute('aria-hidden', 'false');
+      }
+      function closeSideMenu() {
+        sideMenu.classList.remove('open');
+        sideMenu.setAttribute('aria-hidden', 'true');
+      }
+      function toggleSideMenu() {
+        if (sideMenu.classList.contains('open')) closeSideMenu();
+        else openSideMenu();
+      }
+
+      // Close when clicking outside the menu area
+      document.addEventListener('click', (e) => {
+        // close if menu is open and click is outside sideMenu and not on menu toggle
+        if (sideMenu.classList.contains('open')) {
+          if (!sideMenu.contains(e.target) && !menuToggle.contains(e.target)) {
+            closeSideMenu();
+          }
+        }
+      });
+
+      // ESC closes menu
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') closeSideMenu();
+      });
+
+      menuToggle.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleSideMenu();
+      });
+      sideClose.addEventListener('click', () => closeSideMenu());
+
+      // About expand
+      aboutOpen.addEventListener('click', () => {
+        aboutContent.classList.toggle('hidden');
+      });
+
+      // Nav buttons in side menu
+      gotoButtons.forEach(btn => {
+        btn.addEventListener('click', () => {
+          const id = btn.getAttribute('data-goto');
+          if (id) showPage(id);
+        });
+      });
+
+      // Home -> calendar
+      [page1Btn, page1Btn2].forEach(btn => {
+        if (btn) btn.addEventListener('click', () => {
+          showPage('page-2');
+          renderCalendar();
+        });
+      });
+
+      // WhatsApp quick links
+      document.getElementById('whatsapp-link-home')?.addEventListener('click', (e) => {
+        e.preventDefault();
+        const phoneNumber = '66949100932';
+        const msg = encodeURIComponent('I want your help');
+        window.open(`https://wa.me/${phoneNumber}?text=${msg}`, '_blank');
+      });
+      document.getElementById('whatsapp-link-final')?.addEventListener('click', (e) => {
+        e.preventDefault();
+        const phoneNumber = '66949100932';
+        const msg = encodeURIComponent('I want your help');
+        window.open(`https://wa.me/${phoneNumber}?text=${msg}`, '_blank');
+      });
+
+      // Calendar render
+      function renderCalendar() {
+        if (!calendarGrid) return;
+        calendarGrid.innerHTML = '';
+        // weekday headers
+        const weekdays = ['MON','TUE','WED','THU','FRI','SAT','SUN'];
+        weekdays.forEach(w => {
+          const el = document.createElement('div');
+          el.className = 'font-semibold text-xs text-gray-400';
+          el.textContent = w;
+          calendarGrid.appendChild(el);
+        });
+
+        currentMonthEl.textContent = currentDate.toLocaleString('default', { month: 'long', year: 'numeric' });
+
+        const firstDay = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).getDay(); // 0 Sun..6 Sat
+        const daysInMonth = new Date(currentDate.getFullYear(), currentDate.getMonth()+1, 0).getDate();
+        const startOffset = (firstDay === 0) ? 6 : firstDay - 1;
+
+        // empty placeholders
+        for (let i=0;i<startOffset;i++){
+          const empty = document.createElement('div'); empty.className = ''; calendarGrid.appendChild(empty);
+        }
+
+        for (let d=1; d<=daysInMonth; d++){
+          const day = document.createElement('button');
+          day.type = 'button';
+          day.className = 'p-2 rounded-full cursor-pointer hover:bg-blue-100 transition-colors';
+          day.textContent = d;
+          day.addEventListener('click', () => {
+            // deselect previous
+            calendarGrid.querySelectorAll('.day-active').forEach(el => el.classList.remove('day-active'));
+            day.classList.add('day-active');
+            selectedDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), d);
+            renderTimeSlots();
+          });
+          calendarGrid.appendChild(day);
+        }
+      }
+
+      page2Prev.addEventListener('click', () => { currentDate.setMonth(currentDate.getMonth() - 1); renderCalendar(); });
+      page2Next.addEventListener('click', () => { currentDate.setMonth(currentDate.getMonth() + 1); renderCalendar(); });
+
+      function renderTimeSlots() {
+        if (!selectedDate) return;
+        timePicker.classList.remove('hidden');
+        selectedDateDisplay.textContent = selectedDate.toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric' });
+        timeSlots.innerHTML = '';
+
+        const availableTimes = ['9:30am','10:30am','11:30am','1:30pm','2:30pm','3:30pm','4:30pm','5:30pm'];
+        availableTimes.forEach(t => {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'bg-gray-100 text-gray-800 p-3 rounded-lg font-semibold hover:bg-blue-600 hover:text-white transition text-sm';
+          btn.textContent = t;
+          btn.addEventListener('click', () => {
+            // deselect other time buttons
+            timeSlots.querySelectorAll('.time-active').forEach(el => el.classList.remove('time-active', 'bg-blue-600', 'text-white'));
+            btn.classList.add('time-active', 'bg-blue-600', 'text-white');
+            selectedTime = t;
+            // update booking summary and go to form
+            updateBookingSummary();
+            showPage('page-3');
+          });
+          timeSlots.appendChild(btn);
+        });
+      }
+
+      function updateBookingSummary() {
+        if (!selectedDate || !selectedTime) return;
+        const formatted = selectedDate.toLocaleDateString('en-US', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
+        const html = `
+          <div class="text-sm font-semibold text-gray-700">
+            <div class="flex items-center gap-2 mb-2">🗓️ ${selectedTime}, ${formatted}</div>
+            <div class="flex items-center gap-2">⏰ India Standard Time</div>
+          </div>
+        `;
+        bookingSummary.innerHTML = html;
+        bookingSummarySide.innerHTML = html;
+      }
+
+      // Validate simple fields
+      function validateForm() {
+        let valid = true;
+        const required = detailsForm.querySelectorAll('[required]');
+        required.forEach(el => {
+          const errorEl = document.getElementById(el.id + '-error');
+          if (!el.value || (el.type === 'email' && !/\S+@\S+\.\S+/.test(el.value))) {
+            el.classList.add('input-error');
+            if (errorEl) errorEl.classList.remove('hidden');
+            valid = false;
+          } else {
+            el.classList.remove('input-error');
+            if (errorEl) errorEl.classList.add('hidden');
+          }
+        });
+        return valid;
+      }
+
+      // When form is submitted: show tick overlay, then go to final page and fill details
+      detailsForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        // clear general error
+        document.getElementById('form-error-message').classList.add('hidden');
+
+        if (!validateForm()) {
+          document.getElementById('form-error-message').classList.remove('hidden');
+          return;
+        }
+
+        // Prepare scheduled details
+        const name = nameInput.value.trim();
+        const email = emailInput.value.trim();
+        const formattedDate = selectedDate ? selectedDate.toLocaleDateString('en-US', { weekday:'long', year:'numeric', month:'long', day:'numeric' }) : '—';
+        const time = selectedTime || '—';
+
+        // Fill summary placeholders (final page)
+        scheduledNameEl.textContent = name;
+        scheduledEmailEl.textContent = `${time}, ${formattedDate} • ${email}`;
+
+        // Show the blue tick overlay
+        showPage('booking-success-overlay');
+
+        // After animation (~2s), go to final page (page-4)
+        setTimeout(() => {
+          showPage('page-4');
+        }, 2000);
+      });
+
+      // Make Google and Microsoft buttons open the login pages (these are clickable now)
+      googleBtn.addEventListener('click', () => {
+        window.open('https://accounts.google.com/signin', '_blank');
+      });
+      msBtn.addEventListener('click', () => {
+        window.open('https://login.microsoftonline.com/', '_blank');
+      });
+
+      // Back to home
+      backHomeBtn.addEventListener('click', () => {
+        // reset small state if desired
+        selectedDate = null; selectedTime = null;
+        nameInput.value = ''; emailInput.value = ''; phoneInput.value = '';
+        showPage('page-1');
+      });
+
+      // initial render
+      renderCalendar();
+
+      // Prevent non-numeric phone chars
+      phoneInput.addEventListener('input', () => {
+        phoneInput.value = phoneInput.value.replace(/[^0-9]/g, '');
+      });
+
+      // improve accessibility: focus first input on page-3 when shown
+      const observer = new MutationObserver((mutations) => {
+        for (const m of mutations) {
+          if (m.type === 'attributes' && m.attributeName === 'class') {
+            const target = m.target;
+            if (target.id === 'page-3' && target.classList.contains('active-page')) {
+              setTimeout(() => nameInput.focus(), 160);
+            }
+          }
+        }
+      });
+      observer.observe(document.getElementById('page-3'), { attributes: true });
+    })();
+  </script>
+</body>
+</html>
